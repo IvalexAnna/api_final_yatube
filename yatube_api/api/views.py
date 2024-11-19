@@ -9,12 +9,19 @@ from .permissions import CustomPermissionDenied, IsAuthorOrReadOnly
 from .serializers import (CommentSerializer, FollowSerializer, GroupSerializer,
                           PostSerializer)
 
+from rest_framework.pagination import LimitOffsetPagination
+
+class PostPagination(LimitOffsetPagination):
+    default_limit = 10  # Значение по умолчанию для limit
+    max_limit = 100     # Максимальное значение для limit
 
 class PostViewSet(viewsets.ModelViewSet):
     queryset = Post.objects.all()
     serializer_class = PostSerializer
+    pagination_class = PostPagination
     permission_classes = [IsAuthorOrReadOnly]
     authentication_classes = [JWTAuthentication]
+
 
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
@@ -23,49 +30,32 @@ class PostViewSet(viewsets.ModelViewSet):
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
     def retrieve(self, request, *args, **kwargs):
-        try:
-            return super().retrieve(request, *args, **kwargs)
-        except Post.DoesNotExist:
-            raise NotFound("Публикация не найдена.")
+        return super().retrieve(request, *args, **kwargs)
 
     def update(self, request, *args, **kwargs):
-        partial = (
-            request.method == "PATCH"
-        )  # Если используется PATCH, разрешаем частичное обновление
-        instance = self.get_object()  # Получаем объект по ID
+        partial = request.method == "PATCH"
+        instance = self.get_object()
 
         if instance.author != request.user:
             raise PermissionDenied("У вас нет прав на редактирование этой публикации.")
 
         serializer = self.get_serializer(instance, data=request.data, partial=partial)
-        serializer.is_valid(raise_exception=True)  # Проверяем валидность данных
-        self.perform_update(serializer)  # Сохраняем изменения
+        serializer.is_valid(raise_exception=True)
+        self.perform_update(serializer)
 
-        return Response(serializer.data)  # Возвращаем обновленные данные
+        return Response(serializer.data)
 
     def partial_update(self, request, *args, **kwargs):
-        instance = self.get_object()  # Получаем объект по ID
-
-        if instance.author != request.user:
-            raise PermissionDenied("У вас нет прав на редактирование этой публикации.")
-
-        serializer = self.get_serializer(
-            instance, data=request.data, partial=True
-        )  # Указываем partial=True для частичного обновления
-        serializer.is_valid(raise_exception=True)  # Проверяем валидность данных
-        self.perform_update(serializer)  # Сохраняем изменения
-
-        return Response(serializer.data)  # Возвращаем обновленные данные
+        return self.update(request, *args, **kwargs)
 
     def destroy(self, request, *args, **kwargs):
-        instance = self.get_object()  # Получаем объект по ID
+        instance = self.get_object()
 
         if instance.author != request.user:
-            # Возвращаем статус 403 Forbidden
-            raise CustomPermissionDenied()
+            raise PermissionDenied("У вас нет прав на удаление этой публикации.")
 
-        self.perform_destroy(instance)  # Удаляем публикацию
-        return Response(status=status.HTTP_204_NO_CONTENT)  # Возвращаем статус 204
+        self.perform_destroy(instance)
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class CommentViewSet(viewsets.ModelViewSet):

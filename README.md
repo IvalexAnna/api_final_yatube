@@ -22,7 +22,7 @@
 Инструкции по развертыванию проекта локально:
 1. Клонируйте репозиторий:
 ```bash
-   `git clone https://github.com/IvalexAnna/api_yatube_.git`
+   `git clone https://github.com/IvalexAnna/api_final_yatube`
 ```
 
 2. Перейдите в директорию проекта:
