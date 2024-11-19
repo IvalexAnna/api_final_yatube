@@ -1,15 +1,10 @@
+from posts.models import Comment, Follow, Group, Post
 from rest_framework import serializers
 from rest_framework.relations import SlugRelatedField
 
 
-from posts.models import Comment, Post, Follow, Group
-
-
 class PostSerializer(serializers.ModelSerializer):
-    author = SlugRelatedField(
-        slug_field='username',
-        read_only=True
-    )
+    author = serializers.SlugRelatedField(slug_field="username", read_only=True)
 
     class Meta:
         model = Post
@@ -18,10 +13,7 @@ class PostSerializer(serializers.ModelSerializer):
 
 
 class CommentSerializer(serializers.ModelSerializer):
-    author = serializers.SlugRelatedField(
-        read_only=True,
-        slug_field='username'
-    )
+    author = serializers.SlugRelatedField(read_only=True, slug_field="username")
 
     class Meta:
         model = Comment
@@ -33,13 +25,15 @@ class FollowSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Follow
-        fields = ['user', 'following']
-        read_only_fields = ['user']
+        fields = ["user", "following"]
+        read_only_fields = ["user"]
 
     def validate_following(self, value):
         # Проверка на попытку подписаться на самого себя
-        if self.context['request'].user == value:
-            raise serializers.ValidationError("Вы не можете подписаться на самого себя.")
+        if self.context["request"].user == value:
+            raise serializers.ValidationError(
+                "Вы не можете подписаться на самого себя."
+            )
         return value
 
 
