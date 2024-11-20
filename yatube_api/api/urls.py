@@ -18,7 +18,8 @@ urlpatterns = [
                 [
                     path(
                         "comments/",
-                        CommentViewSet.as_view({"get": "list", "post": "create"}),
+                        CommentViewSet.as_view(
+                            {"get": "list", "post": "create"}),
                         name="post-comments",
                     ),
                     path(

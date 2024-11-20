@@ -7,19 +7,15 @@ from .models import Comment, Follow, Group, Post
 class GroupAdmin(admin.ModelAdmin):
     list_display = ("id", "title", "slug", "description")
     search_fields = ("title", "description")
-    # prepopulated_fields = {"slug": ("title",)}
     empty_value_display = "-пусто-"
 
 
 @admin.register(Post)
 class PostAdmin(admin.ModelAdmin):
-    # list_display = ("id", "text", "pub_date", "author", "group")
     list_display = ("id", "text", "pub_date", "author")
     search_fields = ("text",)
-    # list_filter = ("pub_date", "author", "group")
     list_filter = ("pub_date", "author")
     empty_value_display = "-пусто-"
-    # prepopulated_fields = {"slug": ("text",)}
 
 
 @admin.register(Comment)
@@ -36,6 +32,6 @@ class FollowAdmin(admin.ModelAdmin):
     search_fields = (
         "user__username",
         "following__username",
-    )  # Поиск по именам пользователей
-    list_filter = ("user", "following")  # Фильтрация по пользователям
+    )
+    list_filter = ("user", "following")
     empty_value_display = "-пусто-"

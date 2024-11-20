@@ -11,7 +11,8 @@ class IsAuthorOrReadOnly(permissions.BasePermission):
     def has_permission(self, request, view):
         # Разрешить доступ для всех аутентифицированных пользователей
         return (
-            request.method in permissions.SAFE_METHODS or request.user.is_authenticated
+            request.method in permissions.SAFE_METHODS
+            or request.user.is_authenticated
         )
 
     def has_object_permission(self, request, view, obj):

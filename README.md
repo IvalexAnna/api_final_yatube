@@ -26,35 +26,48 @@
 ```
 
 2. Перейдите в директорию проекта:
-    ```bash
+```bash
+
     `cd ваш_репозиторий`
+
 ```
 
 3. Cоздайте и активируйте виртуальное окружение:
-```
+
+```bash
+
     `python -m venv venv`
 
     `source venv/Scripts/activate`
-``` 
+
+```
 
 4. Установите зависимости:
-    ```bash
+```bash
+
     `pip install -r requirements.txt`
-    ```
+
+```
   
 5. Выполните миграции базы данных:
-    ```bash
+```bash
+
     `python manage.py migrate`
-    ```
+
+```
 
 6. Создайте суперпользователя:
-    ```bash
+```bash
+
     `python manage.py createsuperuser`
+
 ```
 
 7. Запустите сервер разработки:
-    ```bash
+```bash
+
     `python manage.py runserver`
+
  ```
 
 8. Теперь вы можете открыть браузер и перейти по адресу http://127.0.0.1:8000/.

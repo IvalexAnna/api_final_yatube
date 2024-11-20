@@ -1,10 +1,12 @@
 from posts.models import Comment, Follow, Group, Post, User
 from rest_framework import serializers
-from rest_framework.relations import SlugRelatedField
 
 
 class PostSerializer(serializers.ModelSerializer):
-    author = serializers.SlugRelatedField(slug_field="username", read_only=True)
+    author = serializers.SlugRelatedField(
+        slug_field="username",
+        read_only=True
+    )
 
     class Meta:
         model = Post
@@ -13,21 +15,23 @@ class PostSerializer(serializers.ModelSerializer):
 
 
 class CommentSerializer(serializers.ModelSerializer):
-    author = serializers.SlugRelatedField(read_only=True, slug_field="username")
+    author = serializers.SlugRelatedField(
+        read_only=True,
+        slug_field="username"
+    )
 
     class Meta:
         model = Comment
         fields = ["id", "author", "post", "text", "created"]
-        read_only_fields = ["id", "author", "created"]
+        read_only_fields = ["id", "author", "created", "post"]
 
 
 class FollowSerializer(serializers.ModelSerializer):
     following = serializers.SlugRelatedField(
-        slug_field='username',
-        queryset=User.objects.all()
+        slug_field="username", queryset=User.objects.all()
     )
-    user = serializers.CharField(source='user.username', read_only=True)
-    
+    user = serializers.CharField(source="user.username", read_only=True)
+
     class Meta:
         model = Follow
         fields = ["user", "following"]
@@ -43,7 +47,7 @@ class FollowSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         # Установка текущего пользователя как подписчика
-        validated_data['user'] = self.context['request'].user
+        validated_data["user"] = self.context["request"].user
         follow_instance = super().create(validated_data)
         # Возвращаем сериализованные данные для follow_instance
         return follow_instance
