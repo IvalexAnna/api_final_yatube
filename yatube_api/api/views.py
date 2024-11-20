@@ -1,5 +1,5 @@
 from posts.models import Comment, Follow, Group, Post
-from rest_framework import filters, permissions, status, viewsets
+from rest_framework import filters, permissions, status, viewsets, serializers
 from rest_framework.exceptions import (MethodNotAllowed, NotFound,
                                        PermissionDenied)
 from rest_framework.response import Response
@@ -10,27 +10,27 @@ from .serializers import (CommentSerializer, FollowSerializer, GroupSerializer,
                           PostSerializer)
 
 from rest_framework.pagination import LimitOffsetPagination
+from django.contrib.auth.models import User
 
-class PostPagination(LimitOffsetPagination):
-    default_limit = 10  # Значение по умолчанию для limit
-    max_limit = 100     # Максимальное значение для limit
 
 class PostViewSet(viewsets.ModelViewSet):
     queryset = Post.objects.all()
     serializer_class = PostSerializer
-    pagination_class = PostPagination
     permission_classes = [IsAuthorOrReadOnly]
     authentication_classes = [JWTAuthentication]
+    pagination_class = LimitOffsetPagination
 
 
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+        serializer.validated_data['author'] = request.user
         self.perform_create(serializer)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
     def retrieve(self, request, *args, **kwargs):
         return super().retrieve(request, *args, **kwargs)
+    
 
     def update(self, request, *args, **kwargs):
         partial = request.method == "PATCH"
@@ -69,28 +69,36 @@ class CommentViewSet(viewsets.ModelViewSet):
     def list(self, request, post_pk=None):
         queryset = self.get_queryset()
         serializer = self.get_serializer(queryset, many=True)
-        return Response(serializer.data)  # Возвращаем список комментариев
+        return Response(serializer.data)
 
     def retrieve(self, request, post_pk, id=None):
         try:
             comment = self.get_queryset().get(id=id)
             serializer = self.get_serializer(comment)
-            return Response(serializer.data)  # Возвращаем данные комментария
+            return Response(serializer.data)
         except Comment.DoesNotExist:
             raise NotFound("Комментарий не найден.")
+
+    def create(self, request, post_pk=None):
+        data = request.data.copy()  # Создаем изменяемую копию данных запроса
+        data['post'] = post_pk  # Устанавливаем пост для комментария
+
+        serializer = self.get_serializer(data=data)
+        serializer.is_valid(raise_exception=True)
+        comment = serializer.save(author=request.user)  # Сохраняем комментарий с автором
+
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
 
     def update(self, request, post_pk, id=None):
         try:
             comment = self.get_queryset().get(id=id)
             if comment.author != request.user:
-                raise PermissionDenied(
-                    "У вас нет прав на редактирование этого комментария."
-                )
+                raise PermissionDenied("У вас нет прав на редактирование этого комментария.")
 
             serializer = self.get_serializer(comment, data=request.data)
             serializer.is_valid(raise_exception=True)
             serializer.save()
-            return Response(serializer.data)  # Возвращаем обновленные данные
+            return Response(serializer.data)
         except Comment.DoesNotExist:
             raise NotFound("Комментарий не найден.")
 
@@ -98,14 +106,12 @@ class CommentViewSet(viewsets.ModelViewSet):
         try:
             comment = self.get_queryset().get(id=id)
             if comment.author != request.user:
-                raise PermissionDenied(
-                    "У вас нет прав на редактирование этого комментария."
-                )
+                raise PermissionDenied("У вас нет прав на редактирование этого комментария.")
 
             serializer = self.get_serializer(comment, data=request.data, partial=True)
             serializer.is_valid(raise_exception=True)
             serializer.save()
-            return Response(serializer.data)  # Возвращаем обновленные данные
+            return Response(serializer.data)
         except Comment.DoesNotExist:
             raise NotFound("Комментарий не найден.")
 
@@ -116,12 +122,9 @@ class CommentViewSet(viewsets.ModelViewSet):
                 raise PermissionDenied("У вас нет прав на удаление этого комментария.")
 
             comment.delete()
-            return Response(
-                status=status.HTTP_204_NO_CONTENT
-            )  # Возвращаем статус 204 No Content
+            return Response(status=status.HTTP_204_NO_CONTENT)
         except Comment.DoesNotExist:
             raise NotFound("Комментарий не найден.")
-
 
 class GroupViewSet(viewsets.ModelViewSet):
     queryset = Group.objects.all().order_by("id")
@@ -198,5 +201,10 @@ class FollowViewSet(viewsets.ModelViewSet):
         return self.queryset.filter(user=self.request.user)
 
     def perform_create(self, serializer):
+        # Проверка на существование подписки
+        following_user = serializer.validated_data['following']
+        if Follow.objects.filter(user=self.request.user, following=following_user).exists():
+            raise serializers.ValidationError("Вы уже подписаны на этого пользователя.")
+        
         # Установка текущего пользователя как подписчика
         serializer.save(user=self.request.user)

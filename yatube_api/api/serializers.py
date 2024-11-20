@@ -1,4 +1,4 @@
-from posts.models import Comment, Follow, Group, Post
+from posts.models import Comment, Follow, Group, Post, User
 from rest_framework import serializers
 from rest_framework.relations import SlugRelatedField
 
@@ -18,11 +18,16 @@ class CommentSerializer(serializers.ModelSerializer):
     class Meta:
         model = Comment
         fields = ["id", "author", "post", "text", "created"]
-        read_only_fields = ["id", "author", "post", "created"]
+        read_only_fields = ["id", "author", "created"]
 
 
 class FollowSerializer(serializers.ModelSerializer):
-
+    following = serializers.SlugRelatedField(
+        slug_field='username',
+        queryset=User.objects.all()
+    )
+    user = serializers.CharField(source='user.username', read_only=True)
+    
     class Meta:
         model = Follow
         fields = ["user", "following"]
@@ -35,6 +40,13 @@ class FollowSerializer(serializers.ModelSerializer):
                 "Вы не можете подписаться на самого себя."
             )
         return value
+
+    def create(self, validated_data):
+        # Установка текущего пользователя как подписчика
+        validated_data['user'] = self.context['request'].user
+        follow_instance = super().create(validated_data)
+        # Возвращаем сериализованные данные для follow_instance
+        return follow_instance
 
 
 class GroupSerializer(serializers.ModelSerializer):
