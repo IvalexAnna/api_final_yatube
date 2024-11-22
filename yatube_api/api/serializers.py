@@ -1,5 +1,6 @@
-from posts.models import Comment, Follow, Group, Post, User
 from rest_framework import serializers
+
+from posts.models import Comment, Follow, Group, Post, User
 
 
 class PostSerializer(serializers.ModelSerializer):
@@ -30,7 +31,9 @@ class FollowSerializer(serializers.ModelSerializer):
     following = serializers.SlugRelatedField(
         slug_field="username", queryset=User.objects.all()
     )
-    user = serializers.CharField(source="user.username", read_only=True)
+    user = serializers.CharField(source="user.username",
+                                 default=serializers.CurrentUserDefault(),
+                                 read_only=True)
 
     class Meta:
         model = Follow
@@ -38,19 +41,25 @@ class FollowSerializer(serializers.ModelSerializer):
         read_only_fields = ["user"]
 
     def validate_following(self, value):
-        # Проверка на попытку подписаться на самого себя
         if self.context["request"].user == value:
             raise serializers.ValidationError(
                 "Вы не можете подписаться на самого себя."
             )
         return value
 
+    def validate(self, attrs):
+        user = self.context["request"].user
+        following_user = attrs.get("following")
+
+        if Follow.objects.filter(user=user, following=following_user).exists():
+            raise serializers.ValidationError(
+                "Вы уже подписаны на этого пользователя."
+            )
+        return super().validate(attrs)
+
     def create(self, validated_data):
-        # Установка текущего пользователя как подписчика
         validated_data["user"] = self.context["request"].user
-        follow_instance = super().create(validated_data)
-        # Возвращаем сериализованные данные для follow_instance
-        return follow_instance
+        return super().create(validated_data)
 
 
 class GroupSerializer(serializers.ModelSerializer):

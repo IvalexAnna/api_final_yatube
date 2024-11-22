@@ -1,15 +1,18 @@
-from rest_framework import filters, permissions, serializers, status, viewsets
-from rest_framework.exceptions import (MethodNotAllowed, NotFound,
-                                       PermissionDenied)
+from rest_framework import filters, permissions, status, viewsets, mixins
+from rest_framework.exceptions import PermissionDenied
 from rest_framework.pagination import LimitOffsetPagination
+from rest_framework.generics import get_object_or_404
 from rest_framework.response import Response
 from rest_framework_simplejwt.authentication import JWTAuthentication
+
 from posts.models import Comment, Follow, Group, Post
 from .permissions import IsAuthorOrReadOnly
-from .serializers import (CommentSerializer,
-                          FollowSerializer,
-                          GroupSerializer,
-                          PostSerializer)
+from .serializers import (
+    CommentSerializer,
+    FollowSerializer,
+    GroupSerializer,
+    PostSerializer,
+)
 
 
 class PostViewSet(viewsets.ModelViewSet):
@@ -19,207 +22,125 @@ class PostViewSet(viewsets.ModelViewSet):
     authentication_classes = [JWTAuthentication]
     pagination_class = LimitOffsetPagination
 
-    def create(self, request, *args, **kwargs):
-        serializer = self.get_serializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        serializer.validated_data["author"] = request.user
-        self.perform_create(serializer)
-        return Response(serializer.data, status=status.HTTP_201_CREATED)
+    def perform_create(self, serializer):
+        serializer.save(author=self.request.user)
 
-    def retrieve(self, request, *args, **kwargs):
-        return super().retrieve(request, *args, **kwargs)
-
-    def update(self, request, *args, **kwargs):
-        partial = request.method == "PATCH"
+    def perform_update(self, serializer):
         instance = self.get_object()
-
-        if instance.author != request.user:
+        if instance.author != self.request.user:
             raise PermissionDenied(
                 "У вас нет прав на редактирование этой публикации."
             )
+        serializer.save()
 
-        serializer = self.get_serializer(
-            instance, data=request.data,
-            partial=partial
-        )
-        serializer.is_valid(raise_exception=True)
-        self.perform_update(serializer)
-
-        return Response(serializer.data)
-
-    def partial_update(self, request, *args, **kwargs):
-        return self.update(request, *args, **kwargs)
-
-    def destroy(self, request, *args, **kwargs):
-        instance = self.get_object()
-
-        if instance.author != request.user:
+    def perform_destroy(self, instance):
+        if instance.author != self.request.user:
             raise PermissionDenied(
                 "У вас нет прав на удаление этой публикации."
             )
-
-        self.perform_destroy(instance)
-        return Response(status=status.HTTP_204_NO_CONTENT)
+        super().perform_destroy(instance)
 
 
 class CommentViewSet(viewsets.ModelViewSet):
     serializer_class = CommentSerializer
     permission_classes = [IsAuthorOrReadOnly]
 
+    def get_post_id(self):
+        return self.kwargs.get("post_pk")
+
+    def get_post_and_comments(self):
+        post_id = self.get_post_id()
+        comments = Comment.objects.filter(post_id=post_id).order_by("-created")
+        return post_id, comments
+
     def get_queryset(self):
-        post_id = self.kwargs.get("post_pk")
-        return Comment.objects.filter(post_id=post_id).order_by("-created")
+        _, comments = self.get_post_and_comments()
+        return comments
 
     def list(self, request, post_pk=None):
-        queryset = self.get_queryset()
-        serializer = self.get_serializer(queryset, many=True)
+        _, comments = self.get_post_and_comments()
+        serializer = self.get_serializer(comments, many=True)
         return Response(serializer.data)
 
     def retrieve(self, request, post_pk, id=None):
-        try:
-            comment = self.get_queryset().get(id=id)
-            serializer = self.get_serializer(comment)
-            return Response(serializer.data)
-        except Comment.DoesNotExist:
-            raise NotFound("Комментарий не найден.")
+        comment = get_object_or_404(self.get_queryset(), id=id)
+        serializer = self.get_serializer(comment)
+        return Response(serializer.data)
+
+    def perform_create(self, serializer):
+        post_id = self.get_post_id()
+        serializer.save(post_id=post_id, author=self.request.user)
+
+    def perform_update(self, serializer):
+        serializer.save()
+
+    def perform_destroy(self, instance):
+        instance.delete()
 
     def create(self, request, post_pk=None):
         data = request.data.copy()
-        data["post"] = post_pk
+        data["post"] = self.get_post_id()
         serializer = self.get_serializer(data=data)
         serializer.is_valid(raise_exception=True)
-        serializer.save(post_id=post_pk, author=request.user)
-
+        self.perform_create(serializer)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
     def update(self, request, post_pk, id=None):
-        try:
-            comment = self.get_queryset().get(id=id)
-            if comment.author != request.user:
-                raise PermissionDenied(
-                    "У вас нет прав на редактирование этого комментария."
-                )
-
-            serializer = self.get_serializer(comment, data=request.data)
-            serializer.is_valid(raise_exception=True)
-            serializer.save()
-            return Response(serializer.data)
-        except Comment.DoesNotExist:
-            raise NotFound("Комментарий не найден.")
+        comment = get_object_or_404(self.get_queryset(), id=id)
+        self.check_object_permissions(request, comment)
+        serializer = self.get_serializer(comment, data=request.data)
+        serializer.is_valid(raise_exception=True)
+        self.perform_update(serializer)
+        return Response(serializer.data)
 
     def partial_update(self, request, post_pk, id=None):
-        try:
-            comment = self.get_queryset().get(id=id)
-            if comment.author != request.user:
-                raise PermissionDenied(
-                    "У вас нет прав на редактирование этого комментария."
-                )
-
-            serializer = self.get_serializer(
-                comment,
-                data=request.data, partial=True
+        comment = get_object_or_404(self.get_queryset(), id=id)
+        if comment.author != request.user:
+            raise PermissionDenied(
+                "У вас нет прав на редактирование этого комментария."
             )
-            serializer.is_valid(raise_exception=True)
-            serializer.save()
-            return Response(serializer.data)
-        except Comment.DoesNotExist:
-            raise NotFound("Комментарий не найден.")
+
+        serializer = self.get_serializer(comment,
+                                         data=request.data,
+                                         partial=True)
+        serializer.is_valid(raise_exception=True)
+        self.perform_update(serializer)
+        return Response(serializer.data)
 
     def destroy(self, request, post_pk, id=None):
-        try:
-            comment = self.get_queryset().get(id=id)
-            if comment.author != request.user:
-                raise PermissionDenied(
-                    "У вас нет прав на удаление этого комментария."
-                )
+        comment = get_object_or_404(self.get_queryset(), id=id)
+        if comment.author != request.user:
+            raise PermissionDenied(
+                "У вас нет прав на удаление этого комментария."
+            )
 
-            comment.delete()
-            return Response(status=status.HTTP_204_NO_CONTENT)
-        except Comment.DoesNotExist:
-            raise NotFound("Комментарий не найден.")
+        self.perform_destroy(comment)
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
-class GroupViewSet(viewsets.ModelViewSet):
+class GroupViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = Group.objects.all().order_by("id")
     serializer_class = GroupSerializer
     permission_classes = [IsAuthorOrReadOnly]
     pagination_class = None
 
-    def create(self, request, *args, **kwargs):
-        raise MethodNotAllowed("Группы можно создавать только через админку.")
-
     def retrieve(self, request, pk=None):
-        try:
-            group = self.get_queryset().get(pk=pk)
-            serializer = self.get_serializer(group)
-            return Response(serializer.data)
-        except Group.DoesNotExist:
-            raise NotFound("Группа не найдена.")
+        group = self.get_group(pk)
+        serializer = self.get_serializer(group)
+        return Response(serializer.data)
 
-    def update(self, request, pk=None):
-        try:
-            group = self.get_queryset().get(pk=pk)
-            if not request.user.is_authenticated:
-                raise PermissionDenied(
-                    "Вы должны быть аутентифицированы"
-                )
-
-            serializer = self.get_serializer(group, data=request.data)
-            serializer.is_valid(raise_exception=True)
-            serializer.save()
-            return Response(serializer.data)
-        except Group.DoesNotExist:
-            raise NotFound("Группа не найдена.")
-
-    def partial_update(self, request, pk=None):
-        try:
-            group = self.get_queryset().get(pk=pk)
-            if not request.user.is_authenticated:
-                raise PermissionDenied(
-                    "Вы должны быть аутентифицированы."
-                )
-
-            serializer = self.get_serializer(
-                group,
-                data=request.data,
-                partial=True
-            )
-            serializer.is_valid(raise_exception=True)
-            serializer.save()
-            return Response(serializer.data)
-        except Group.DoesNotExist:
-            raise NotFound("Группа не найдена.")
-
-    def destroy(self, request, pk=None):
-        try:
-            group = self.get_queryset().get(pk=pk)
-            if not request.user.is_authenticated:
-                raise PermissionDenied(
-                    "Вы должны быть аутентифицированы для удаления группы."
-                )
-
-            group.delete()
-            return Response(status=status.HTTP_204_NO_CONTENT)
-        except Group.DoesNotExist:
-            raise NotFound("Группа не найдена.")
+    def get_group(self, pk):
+        return self.get_object()
 
 
-class FollowViewSet(viewsets.ModelViewSet):
-    queryset = Follow.objects.all().order_by("id")
+class FollowViewSet(mixins.ListModelMixin,
+                    mixins.CreateModelMixin,
+                    viewsets.GenericViewSet):
     serializer_class = FollowSerializer
     permission_classes = [permissions.IsAuthenticated]
-    filter_backends = [filters.SearchFilter]
-    search_fields = ["following__username"]
+    authentication_classes = [JWTAuthentication]
+    filter_backends = (filters.SearchFilter,)
+    search_fields = ['following__username']  # Укажите поля для поиска
 
     def get_queryset(self):
-        return self.queryset.filter(user=self.request.user)
-
-    def perform_create(self, serializer):
-        following_user = serializer.validated_data["following"]
-        if Follow.objects.filter(
-            user=self.request.user, following=following_user
-        ).exists():
-            raise serializers.ValidationError(
-                "Вы уже подписаны на этого пользователя."
-            )
-        serializer.save(user=self.request.user)
+        return Follow.objects.all().filter(user=self.request.user)
