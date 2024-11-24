@@ -1,8 +1,6 @@
-from rest_framework import filters, permissions, status, viewsets, mixins
+from rest_framework import filters, permissions, viewsets, mixins
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.pagination import LimitOffsetPagination
-from rest_framework.generics import get_object_or_404
-from rest_framework.response import Response
 from rest_framework_simplejwt.authentication import JWTAuthentication
 
 from posts.models import Comment, Follow, Group, Post
