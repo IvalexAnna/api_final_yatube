@@ -48,74 +48,14 @@ class CommentViewSet(viewsets.ModelViewSet):
     def get_post_id(self):
         return self.kwargs.get("post_pk")
 
-    def get_post_and_comments(self):
+    def get_queryset(self):
         post_id = self.get_post_id()
         comments = Comment.objects.filter(post_id=post_id).order_by("-created")
-        return post_id, comments
-
-    def get_queryset(self):
-        _, comments = self.get_post_and_comments()
         return comments
-
-    def list(self, request, post_pk=None):
-        _, comments = self.get_post_and_comments()
-        serializer = self.get_serializer(comments, many=True)
-        return Response(serializer.data)
-
-    def retrieve(self, request, post_pk, id=None):
-        comment = get_object_or_404(self.get_queryset(), id=id)
-        serializer = self.get_serializer(comment)
-        return Response(serializer.data)
 
     def perform_create(self, serializer):
         post_id = self.get_post_id()
         serializer.save(post_id=post_id, author=self.request.user)
-
-    def perform_update(self, serializer):
-        serializer.save()
-
-    def perform_destroy(self, instance):
-        instance.delete()
-
-    def create(self, request, post_pk=None):
-        data = request.data.copy()
-        data["post"] = self.get_post_id()
-        serializer = self.get_serializer(data=data)
-        serializer.is_valid(raise_exception=True)
-        self.perform_create(serializer)
-        return Response(serializer.data, status=status.HTTP_201_CREATED)
-
-    def update(self, request, post_pk, id=None):
-        comment = get_object_or_404(self.get_queryset(), id=id)
-        self.check_object_permissions(request, comment)
-        serializer = self.get_serializer(comment, data=request.data)
-        serializer.is_valid(raise_exception=True)
-        self.perform_update(serializer)
-        return Response(serializer.data)
-
-    def partial_update(self, request, post_pk, id=None):
-        comment = get_object_or_404(self.get_queryset(), id=id)
-        if comment.author != request.user:
-            raise PermissionDenied(
-                "У вас нет прав на редактирование этого комментария."
-            )
-
-        serializer = self.get_serializer(comment,
-                                         data=request.data,
-                                         partial=True)
-        serializer.is_valid(raise_exception=True)
-        self.perform_update(serializer)
-        return Response(serializer.data)
-
-    def destroy(self, request, post_pk, id=None):
-        comment = get_object_or_404(self.get_queryset(), id=id)
-        if comment.author != request.user:
-            raise PermissionDenied(
-                "У вас нет прав на удаление этого комментария."
-            )
-
-        self.perform_destroy(comment)
-        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class GroupViewSet(viewsets.ReadOnlyModelViewSet):
@@ -123,11 +63,6 @@ class GroupViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = GroupSerializer
     permission_classes = [IsAuthorOrReadOnly]
     pagination_class = None
-
-    def retrieve(self, request, pk=None):
-        group = self.get_group(pk)
-        serializer = self.get_serializer(group)
-        return Response(serializer.data)
 
     def get_group(self, pk):
         return self.get_object()
@@ -140,7 +75,7 @@ class FollowViewSet(mixins.ListModelMixin,
     permission_classes = [permissions.IsAuthenticated]
     authentication_classes = [JWTAuthentication]
     filter_backends = (filters.SearchFilter,)
-    search_fields = ['following__username']  # Укажите поля для поиска
+    search_fields = ["following__username"]
 
     def get_queryset(self):
         return Follow.objects.all().filter(user=self.request.user)
