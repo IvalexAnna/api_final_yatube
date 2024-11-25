@@ -1,5 +1,4 @@
 from rest_framework import filters, permissions, viewsets, mixins
-from rest_framework.exceptions import PermissionDenied
 from rest_framework.pagination import LimitOffsetPagination
 from rest_framework_simplejwt.authentication import JWTAuthentication
 
@@ -22,21 +21,6 @@ class PostViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         serializer.save(author=self.request.user)
-
-    def perform_update(self, serializer):
-        instance = self.get_object()
-        if instance.author != self.request.user:
-            raise PermissionDenied(
-                "У вас нет прав на редактирование этой публикации."
-            )
-        serializer.save()
-
-    def perform_destroy(self, instance):
-        if instance.author != self.request.user:
-            raise PermissionDenied(
-                "У вас нет прав на удаление этой публикации."
-            )
-        super().perform_destroy(instance)
 
 
 class CommentViewSet(viewsets.ModelViewSet):
@@ -61,9 +45,6 @@ class GroupViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = GroupSerializer
     permission_classes = [IsAuthorOrReadOnly]
     pagination_class = None
-
-    def get_group(self, pk):
-        return self.get_object()
 
 
 class FollowViewSet(mixins.ListModelMixin,
